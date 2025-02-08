@@ -1,83 +1,143 @@
 #include <Mozzi.h>
 #include <Oscil.h>
-#include <tables/sin2048_int8.h>
+#include <tables/triangle2048_int8.h>
 
+// ----- Pin Definitions -----
 #define RIGHT_INDEX 19
 #define RIGHT_MIDDLE 21
-#define RIGHT_RING 32
+#define RIGHT_RING 18
+#define RIGHT_PINKY 17
+
 #define LEFT_INDEX 22
 #define LEFT_MIDDLE 23
-#define LEFT_RING 12
+#define LEFT_RING 16
+#define LEFT_PINKY 15
 
-Oscil<SIN2048_NUM_CELLS, MOZZI_AUDIO_RATE> sin1(SIN2048_DATA);
-Oscil<SIN2048_NUM_CELLS, MOZZI_AUDIO_RATE> sin2(SIN2048_DATA);
-Oscil<SIN2048_NUM_CELLS, MOZZI_AUDIO_RATE> sin3(SIN2048_DATA);
-Oscil<SIN2048_NUM_CELLS, MOZZI_AUDIO_RATE> sin4(SIN2048_DATA);
-Oscil<SIN2048_NUM_CELLS, MOZZI_AUDIO_RATE> sin5(SIN2048_DATA);
-Oscil<SIN2048_NUM_CELLS, MOZZI_AUDIO_RATE> sin6(SIN2048_DATA);
-Oscil<SIN2048_NUM_CELLS, MOZZI_AUDIO_RATE> sin7(SIN2048_DATA);
-Oscil<SIN2048_NUM_CELLS, MOZZI_AUDIO_RATE> sin8(SIN2048_DATA);
+// Lower amplitude value for the oscillators.
+#define OSC_AMPLITUDE 64
 
-uint8_t sin1_v = 0, sin2_v = 0, sin3_v = 0, sin4_v = 0;
-uint8_t sin5_v = 0, sin6_v = 0, sin7_v = 0, sin8_v = 0;
+// ----- Oscillator Setup -----
+// Arrays for right and left finger pins (used for oscillator combinations).
+const uint8_t rightPins[4] = { RIGHT_INDEX, RIGHT_MIDDLE, RIGHT_RING, RIGHT_PINKY };
+const uint8_t leftPins[4]  = { LEFT_INDEX, LEFT_MIDDLE, LEFT_RING, LEFT_PINKY };
+
+// A 4x4 frequency table for the 16 oscillators.
+// Rows correspond to right-hand fingers (index to pinky)
+// Columns correspond to left-hand fingers (index to pinky)
+const int freqTable[4][4] = {
+  {262, 294, 330, 349},   // e.g., C4, D4, E4, F4
+  {392, 440, 494, 523},   // e.g., G4, A4, B4, C5
+  {587, 659, 698, 784},   // e.g., D5, E5, F5, G5
+  {880, 988, 1046, 1175}  // e.g., A5, B5, C6, D6
+};
+
+// Create a 4x4 matrix of oscillators using the triangle waveform.
+Oscil<TRIANGLE2048_NUM_CELLS, MOZZI_AUDIO_RATE> oscs[4][4] = {
+  { Oscil<TRIANGLE2048_NUM_CELLS, MOZZI_AUDIO_RATE>(TRIANGLE2048_DATA),
+    Oscil<TRIANGLE2048_NUM_CELLS, MOZZI_AUDIO_RATE>(TRIANGLE2048_DATA),
+    Oscil<TRIANGLE2048_NUM_CELLS, MOZZI_AUDIO_RATE>(TRIANGLE2048_DATA),
+    Oscil<TRIANGLE2048_NUM_CELLS, MOZZI_AUDIO_RATE>(TRIANGLE2048_DATA) },
+
+  { Oscil<TRIANGLE2048_NUM_CELLS, MOZZI_AUDIO_RATE>(TRIANGLE2048_DATA),
+    Oscil<TRIANGLE2048_NUM_CELLS, MOZZI_AUDIO_RATE>(TRIANGLE2048_DATA),
+    Oscil<TRIANGLE2048_NUM_CELLS, MOZZI_AUDIO_RATE>(TRIANGLE2048_DATA),
+    Oscil<TRIANGLE2048_NUM_CELLS, MOZZI_AUDIO_RATE>(TRIANGLE2048_DATA) },
+
+  { Oscil<TRIANGLE2048_NUM_CELLS, MOZZI_AUDIO_RATE>(TRIANGLE2048_DATA),
+    Oscil<TRIANGLE2048_NUM_CELLS, MOZZI_AUDIO_RATE>(TRIANGLE2048_DATA),
+    Oscil<TRIANGLE2048_NUM_CELLS, MOZZI_AUDIO_RATE>(TRIANGLE2048_DATA),
+    Oscil<TRIANGLE2048_NUM_CELLS, MOZZI_AUDIO_RATE>(TRIANGLE2048_DATA) },
+
+  { Oscil<TRIANGLE2048_NUM_CELLS, MOZZI_AUDIO_RATE>(TRIANGLE2048_DATA),
+    Oscil<TRIANGLE2048_NUM_CELLS, MOZZI_AUDIO_RATE>(TRIANGLE2048_DATA),
+    Oscil<TRIANGLE2048_NUM_CELLS, MOZZI_AUDIO_RATE>(TRIANGLE2048_DATA),
+    Oscil<TRIANGLE2048_NUM_CELLS, MOZZI_AUDIO_RATE>(TRIANGLE2048_DATA) }
+};
+
+// This array holds the target amplitude (0 or OSC_AMPLITUDE) for each oscillator.
+uint8_t oscTarget[4][4] = {0};
+
+// This array holds the smoothed amplitude for each oscillator.
+uint8_t smoothedAmp[4][4] = {0};
+
+// ----- Finger Input Debug Setup -----
+// Define an array for the eight physical finger pins.
+// Order: 1=Right Index, 2=Right Middle, 3=Right Ring, 4=Right Pinky,
+//        5=Left Index, 6=Left Middle, 7=Left Ring, 8=Left Pinky.
+const uint8_t fingerPins[8] = { RIGHT_INDEX, RIGHT_MIDDLE, RIGHT_RING, RIGHT_PINKY,
+                                LEFT_INDEX, LEFT_MIDDLE, LEFT_RING, LEFT_PINKY };
+// We'll use this array to track changes. Initialize previous state to HIGH (not pressed).
+bool prevFingerState[8] = { HIGH, HIGH, HIGH, HIGH, HIGH, HIGH, HIGH, HIGH };
 
 void setup() {
   startMozzi();
 
-  pinMode(RIGHT_INDEX, INPUT_PULLUP);
-  pinMode(RIGHT_MIDDLE, INPUT_PULLUP);
-  pinMode(RIGHT_RING, INPUT_PULLUP);
-  pinMode(LEFT_INDEX, INPUT_PULLUP);
-  pinMode(LEFT_MIDDLE, INPUT_PULLUP);
-  pinMode(LEFT_RING, INPUT_PULLUP);
-
-  sin1.setFreq(262);  // C4
-  sin2.setFreq(330);  // E4
-  sin3.setFreq(392);  // G4
-  sin4.setFreq(494);  // B4
-  sin5.setFreq(523);  // C5
-  sin6.setFreq(659);  // E5
-  sin7.setFreq(784);  // G5
-  sin8.setFreq(988);  // B5
-
+  // Set all finger pins as inputs with pullup resistors.
+  for (uint8_t i = 0; i < 4; i++) {
+    pinMode(rightPins[i], INPUT_PULLUP);
+    pinMode(leftPins[i], INPUT_PULLUP);
+  }
+  // Also set up the debug finger pins.
+  for (uint8_t i = 0; i < 8; i++) {
+    pinMode(fingerPins[i], INPUT_PULLUP);
+  }
+  
+  // Initialize each oscillator with its corresponding frequency.
+  for (uint8_t i = 0; i < 4; i++) {
+    for (uint8_t j = 0; j < 4; j++) {
+      oscs[i][j].setFreq(freqTable[i][j]);
+    }
+  }
+  
   Serial.begin(115200);
 }
 
+// ----- Mozzi Control Update -----
+// This function is called at the control rate.
 void updateControl() {
-  sin1_v = (digitalRead(RIGHT_INDEX) == LOW && (digitalRead(LEFT_INDEX) == LOW || digitalRead(LEFT_MIDDLE) == LOW || digitalRead(LEFT_RING) == LOW)) ? 255 : 0;
-  sin2_v = (digitalRead(RIGHT_MIDDLE) == LOW && (digitalRead(LEFT_INDEX) == LOW || digitalRead(LEFT_MIDDLE) == LOW || digitalRead(LEFT_RING) == LOW)) ? 255 : 0;
-  sin3_v = (digitalRead(LEFT_INDEX) == LOW && (digitalRead(RIGHT_INDEX) == LOW || digitalRead(RIGHT_MIDDLE) == LOW || digitalRead(RIGHT_RING) == LOW)) ? 255 : 0;
-  sin4_v = (digitalRead(LEFT_MIDDLE) == LOW && (digitalRead(RIGHT_INDEX) == LOW || digitalRead(RIGHT_MIDDLE) == LOW || digitalRead(RIGHT_RING) == LOW)) ? 255 : 0;
-  sin5_v = (digitalRead(RIGHT_RING) == LOW && (digitalRead(LEFT_INDEX) == LOW || digitalRead(LEFT_MIDDLE) == LOW || digitalRead(LEFT_RING) == LOW)) ? 255 : 0;
-  sin6_v = (digitalRead(RIGHT_RING) == LOW && (digitalRead(LEFT_INDEX) == LOW || digitalRead(LEFT_MIDDLE) == LOW || digitalRead(LEFT_RING) == LOW)) ? 255 : 0;
-  sin7_v = (digitalRead(LEFT_RING) == LOW && (digitalRead(RIGHT_INDEX) == LOW || digitalRead(RIGHT_MIDDLE) == LOW || digitalRead(RIGHT_RING) == LOW)) ? 255 : 0;
-  sin8_v = (digitalRead(LEFT_RING) == LOW && (digitalRead(RIGHT_INDEX) == LOW || digitalRead(RIGHT_MIDDLE) == LOW || digitalRead(RIGHT_RING) == LOW)) ? 255 : 0;
-
-  Serial.println(sin1_v);
-  Serial.println(sin2_v);
-  Serial.println(sin3_v);
-  Serial.println(sin4_v);
-  Serial.println(sin5_v);
-  Serial.println(sin6_v);
-  Serial.println(sin7_v);
-  Serial.println(sin8_v);
+  // For every right-left finger combination, set the target amplitude.
+  for (uint8_t i = 0; i < 4; i++) {
+    for (uint8_t j = 0; j < 4; j++) {
+      // If both corresponding pins are pressed (LOW), set amplitude; otherwise 0.
+      oscTarget[i][j] = ((digitalRead(rightPins[i]) == LOW) && (digitalRead(leftPins[j]) == LOW))
+                          ? OSC_AMPLITUDE : 0;
+    }
+  }
 }
 
+// ----- Mozzi Audio Update -----
+// This function is called at the audio rate to produce sound.
 AudioOutput updateAudio() {
-  int16_t mixedOutput = ((sin1.next() * sin1_v) / 8) +
-                        ((sin2.next() * sin2_v) / 8) +
-                        ((sin3.next() * sin3_v) / 8) +
-                        ((sin4.next() * sin4_v) / 8) +
-                        ((sin5.next() * sin5_v) / 8) +
-                        ((sin6.next() * sin6_v) / 8) +
-                        ((sin7.next() * sin7_v) / 8) +
-                        ((sin8.next() * sin8_v) / 8);
+  int32_t mixedOutput = 0;
+
+  // Smooth each oscillator's amplitude and mix the audio output.
+  for (uint8_t i = 0; i < 4; i++) {
+    for (uint8_t j = 0; j < 4; j++) {
+      // Simple IIR smoothing: new_value = (old_value * 15 + target) / 16.
+      smoothedAmp[i][j] = (smoothedAmp[i][j] * 15 + oscTarget[i][j]) >> 4;
+      mixedOutput += (oscs[i][j].next() * smoothedAmp[i][j]);
+    }
+  }
+
+  mixedOutput /= 16; // Scale the overall output.
   return MonoOutput::from16Bit(mixedOutput);
 }
 
+// ----- Main Loop -----
+// In addition to audioHook(), we check for finger input changes and print the finger number (1-8).
 void loop() {
   audioHook();
+
+  // Check each of the eight finger inputs.
+  for (uint8_t i = 0; i < 8; i++) {
+    bool currentState = (digitalRead(fingerPins[i]) == LOW); // true if pressed
+    // If the state has changed from the previous reading...
+    if (currentState != prevFingerState[i]) {
+      prevFingerState[i] = currentState;  // Update stored state.
+      // If the finger is now pressed, print its number (1-8).
+      if (currentState) {
+        Serial.println(i + 1);
+      }
+    }
+  }
 }
-
-
-
