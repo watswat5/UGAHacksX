@@ -3,21 +3,28 @@
 #include <tables/triangle2048_int8.h>
 
 // ----- Pin Definitions -----
-#define RIGHT_INDEX 19
-#define RIGHT_MIDDLE 21
-#define RIGHT_RING 18
-#define RIGHT_PINKY 17
+// Finger (touch) input pins for the oscillator matrix:
+#define RIGHT_INDEX 23
+#define RIGHT_MIDDLE 22
+#define RIGHT_RING 21
+#define RIGHT_PINKY 19
 
-#define LEFT_INDEX 22
-#define LEFT_MIDDLE 23
-#define LEFT_RING 16
-#define LEFT_PINKY 15
+#define LEFT_INDEX 18
+#define LEFT_MIDDLE 4
+#define LEFT_RING 15
+#define LEFT_PINKY 13
+
+// Joystick analog pin definitions for frequency bending:
+// Top 8 oscillators (rows 0-1) use the left joystick’s Y,
+// Bottom 8 oscillators (rows 2-3) use the right joystick’s Y.
+#define JOY_LEFT_Y_PIN 34
+#define JOY_RIGHT_Y_PIN 27
 
 // Lower amplitude value for the oscillators.
 #define OSC_AMPLITUDE 64
 
 // ----- Oscillator Setup -----
-// Arrays for right and left finger pins (used for oscillator combinations).
+// Arrays for the right-hand and left-hand finger pins (which also select rows and columns).
 const uint8_t rightPins[4] = { RIGHT_INDEX, RIGHT_MIDDLE, RIGHT_RING, RIGHT_PINKY };
 const uint8_t leftPins[4]  = { LEFT_INDEX, LEFT_MIDDLE, LEFT_RING, LEFT_PINKY };
 
@@ -82,7 +89,7 @@ void setup() {
     pinMode(fingerPins[i], INPUT_PULLUP);
   }
   
-  // Initialize each oscillator with its corresponding frequency.
+  // Initialize each oscillator with its corresponding base frequency.
   for (uint8_t i = 0; i < 4; i++) {
     for (uint8_t j = 0; j < 4; j++) {
       oscs[i][j].setFreq(freqTable[i][j]);
@@ -95,10 +102,34 @@ void setup() {
 // ----- Mozzi Control Update -----
 // This function is called at the control rate.
 void updateControl() {
+  // --- Joystick Frequency Shift ---
+  // Read the joystick Y values using mozziAnalogRead().
+  // (Assuming a range of 0 to 1023, with roughly 512 at center.)
+  int leftY = mozziAnalogRead(JOY_LEFT_Y_PIN);
+  int rightY = mozziAnalogRead(JOY_RIGHT_Y_PIN);
+
+  // Map deviation from center to a shift percentage:
+  // For a full deviation (~512) we want ±6% (i.e., multiplier ranges 0.94 to 1.06).
+  float leftShift = ((leftY - 512) / 512.0) * 0.06;   // e.g., +0.06 at max up, -0.06 at max down
+  float rightShift = ((rightY - 512) / 512.0) * 0.06;   // same for right joystick
+
+  // Update each oscillator's frequency.
+  // Use the left joystick’s shift for the top half (rows 0 and 1)
+  // and the right joystick’s shift for the bottom half (rows 2 and 3).
+  for (uint8_t i = 0; i < 4; i++) {
+    float multiplier = (i < 2) ? (1.0 + leftShift) : (1.0 + rightShift);
+    for (uint8_t j = 0; j < 4; j++) {
+      // Multiply the base frequency by the computed multiplier.
+      int newFreq = freqTable[i][j] * multiplier;
+      oscs[i][j].setFreq(newFreq);
+    }
+  }
+
+  // --- Finger Input Amplitude Control ---
   // For every right-left finger combination, set the target amplitude.
+  // (If both corresponding finger pins are pressed (LOW), set amplitude; otherwise 0.)
   for (uint8_t i = 0; i < 4; i++) {
     for (uint8_t j = 0; j < 4; j++) {
-      // If both corresponding pins are pressed (LOW), set amplitude; otherwise 0.
       oscTarget[i][j] = ((digitalRead(rightPins[i]) == LOW) && (digitalRead(leftPins[j]) == LOW))
                           ? OSC_AMPLITUDE : 0;
     }
@@ -124,7 +155,7 @@ AudioOutput updateAudio() {
 }
 
 // ----- Main Loop -----
-// In addition to audioHook(), we check for finger input changes and print the finger number (1-8).
+// In addition to calling audioHook(), we also check for finger input changes and print the finger number (1-8) for debugging.
 void loop() {
   audioHook();
 
