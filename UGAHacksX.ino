@@ -1,34 +1,54 @@
-#include <MozziConfigValues.h> // only needed, if you want to change some defaults
-#define MOZZI_CONTROL_RATE 64  // any options then go above the Mozzi.h include
-#include <Mozzi.h>             // needed once in each sketch
+#include <Mozzi.h>
+#include <Oscil.h>
+#include <tables/sin2048_int8.h>
+
+#define RIGHT_INDEX 19
+#define RIGHT_MIDDLE 21
+#define LEFT_INDEX 22
+#define LEFT_MIDDLE 23
+
+Oscil<SIN2048_NUM_CELLS, MOZZI_AUDIO_RATE> sin1(SIN2048_DATA);
+Oscil<SIN2048_NUM_CELLS, MOZZI_AUDIO_RATE> sin2(SIN2048_DATA);
+Oscil<SIN2048_NUM_CELLS, MOZZI_AUDIO_RATE> sin3(SIN2048_DATA);
+Oscil<SIN2048_NUM_CELLS, MOZZI_AUDIO_RATE> sin4(SIN2048_DATA);
+
+uint8_t sin1_v = 0, sin2_v = 0, sin3_v = 0, sin4_v = 0;
 
 void setup() {
   startMozzi();
+
+  pinMode(RIGHT_INDEX, INPUT_PULLUP);
+  pinMode(RIGHT_MIDDLE, INPUT_PULLUP);
+  pinMode(LEFT_INDEX, INPUT_PULLUP);
+  pinMode(LEFT_MIDDLE, INPUT_PULLUP);
+
+  sin1.setFreq(262);
+  sin2.setFreq(330);
+  sin3.setFreq(392);
+  sin4.setFreq(494);
+  Serial.begin(115200);
 }
 
 void updateControl() {
-  // your control code
+  sin1_v = digitalRead(RIGHT_INDEX) == LOW ? 255 : 0;
+  sin2_v = digitalRead(RIGHT_MIDDLE) == LOW ? 255 : 0;
+  sin3_v = digitalRead(LEFT_INDEX) == LOW ? 255 : 0;
+  sin4_v = digitalRead(LEFT_MIDDLE) == LOW ? 255 : 0;
+
+  Serial.println(sin1_v);
+  Serial.println(sin2_v);
+  Serial.println(sin3_v);
+  Serial.println(sin4_v);
 }
 
 AudioOutput updateAudio() {
-  // For mono output, the return value of this function is really just a signed integer.
-  // However, for best portability of your sketch to different boards and configurations,
-  // pick one of the variants below, depending on the "natural" range of the audio values
-  // you generate:
-  return MonoOutput::from8Bit(0);  // if your signal is in 8 bit range
-  /* OR */
-  return MonoOutput::fromAlmostNBit(9, 0);  // if your signal is between -244 and 243 (_almost_ 9 bits is a special case on AVR boards)
-  /* OR */
-  return MonoOutput::fromAlmostNBit(9, 0).clip();  // To clip (instead of overflow), should a few stray values exceed the allowable range
-  /* OR */
-  return MonoOutput::from16Bit(0);  // if your signal is in 16 bit range, e.g. the product of two 8 bit numbers
-  /* OR */
-  return MonoOutput::fromNBit(21, 0);  // if your signal happens to be in 21 bit range
-  // In case you are wondering:
-  // In older sketches, you will find "int updateAudio()", returning a plain int value.
-  // That will still work, but is not recommended.
+  int16_t mixedOutput = ((sin1.next() * sin1_v) / 4) +
+                        ((sin2.next() * sin2_v) / 4) +
+                        ((sin3.next() * sin3_v) / 4) +
+                        ((sin4.next() * sin4_v) / 4);
+  return MonoOutput::from16Bit(mixedOutput);
 }
 
 void loop() {
-  audioHook(); // fills the audio buffer
+  audioHook();
 }
