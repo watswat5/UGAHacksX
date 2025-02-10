@@ -1,12 +1,75 @@
-Group Members:
-Christopher Antepenko
-Caleb Barnett
-Adithya Lakshmikanth
-Krishna Mohan
+# 🎵 ESP32 Polyphonic Synthesizer
 
-Project Description:
-This project aims to create an intuitive and interactive hand-held device that can be played as a musical instrument. By integrating sound synthesis and touch-sensitive controls, the device will allow users to create and manipulate musical synth sounds. Featuring scale selection, dynamic pitch modulation and differing synth settings, it offers a unique and engaging way to explore music making. By incorporating free play and a memory game mode, we ensure that users of all skill levels can have an enriching experience..
+## 🎹 Project Overview
+This project is a **polyphonic 16-voice synthesizer** powered by an **ESP32-WROVER module**, running the **Mozzi** synthesizer library. Designed for expressive music creation, this device features an intuitive button layout for note selection and **thumbstick-controlled pitch shifting**.
 
-This project utilizes an ESP32-WROVER as its primary core, with eight buttons and two analog joysticks. It has a single speaker outputting sound, all encased in a custom-designed 3D-printed case.
+---
 
-The 3D models used can be found in the cad folder. Liberal hot glue was used to combine all parts together. The switch holes are sized to snap fit mechanical keyboard switches such as cherrymx.
+## 👥 Group Members
+- **Christopher Antepenko**
+- **Caleb Barnett**
+- **Adithya Lakshmikanth**
+- **Krishna Mohan**
+
+---
+
+## 🎼 Usage
+### **🎛️ Controls**
+- **4 left-hand buttons** select the **octave section**.
+- **4 right-hand buttons** select the **note within that section**.
+- **Thumbsticks** allow for **pitch shifting** and expressive modulation.
+
+### **🎵 Note Mapping**
+| Left Hand | Right Index | Right Middle | Right Ring | Right Pinky |
+|-----------|------------|--------------|------------|------------|
+| **Left Index** | C4 | D4 | E4 | F4 |
+| **Left Middle** | G4 | A4 | B4 | C5 |
+| **Left Ring** | D5 | E5 | F5 | G5 |
+| **Left Pinky** | A5 | B5 | C6 | D6 |
+
+- **Play any combination of these 8 buttons simultaneously** for full polyphony.
+- **Thumbsticks for pitch shifting**:
+  - 🎚 **Left thumbstick** controls **Left Index & Left Middle octaves**.
+  - 🎚 **Right thumbstick** controls **Left Ring & Left Pinky octaves**.
+
+This setup enables effects like **glissandos**, **vibratos**, and **microtonal adjustments**.
+
+---
+
+## 🛠️ Building & Setup
+### **🔧 Hardware Requirements**
+- **ESP32-WROVER or ESP32-S3** *(pin configuration may vary by model)*
+- **Mechanical keyboard switches** *(snap-fit holes in the 3D model)*
+- **Thumbstick modules** *(commonly used for Arduino projects)*
+- **Amplifier & speaker / 3.5mm jack for external audio**
+- **Custom 3D-printed enclosure** *(CAD files included in `cad/` folder)*
+- **Liberal use of hot glue!** 😆
+
+### **💾 Software Requirements**
+1. **Install Required Libraries** from the **Arduino Library Manager**:
+   - `Mozzi`
+   - `FixMath`
+2. **Use the correct ESP32 board package**:
+   - Install **ESP32 package v2.0.14** from Espressif (⚠️ Do NOT use v3.11, as it conflicts with the Wire library and will prevent sound output.)
+
+### **📡 Audio Output**
+- **Line-out connection** for external speakers or amplifiers.
+- **UGA Hacks X version** features an **internal speaker & amplifier**.
+
+---
+
+## 📂 Resources & Files
+📁 **Schematic & Wiring** – Included in the repository for proper assembly.
+📁 **3D Models & CAD Files** – Found in the `cad/` folder for custom enclosures.
+
+---
+
+## 🚀 Future Improvements
+- Enhance thumbstick calibration for **smoother pitch control**.
+- Modify case ergonomics to improve handling.
+- Add a display and menu to allow the user to modify synth effects.
+- Improve enclosure design to avoid **thumbstick collision issues**.
+- Experiment with **additional synthesis techniques** using the Mozzi library.
+
+🎶 *Unleash your inner musician and start creating unique sounds with this ESP32 Synth!* 🎶
+
